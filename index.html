@@ -1,0 +1,506 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>UTP human evaluation</title>
+  <link rel="stylesheet" href="pdfjs/pdf_viewer.css?v=3.11.174">
+  <link rel="stylesheet" href="styles.css?v=10">
+</head>
+<body>
+
+<!-- ============================================================ sign in -->
+<div id="screen-auth" class="auth" hidden>
+  <div class="auth-card">
+    <p class="eyebrow">Human evaluation</p>
+    <h1 id="auth-title">UTP human evaluation</h1>
+    <p class="auth-lead">You will read the income-tax note of annual reports (Form 10-K) and answer six questions about
+      uncertain tax positions. You can stop at any time and continue later: log in again with the same ID and password.</p>
+    <div class="tabs" role="tablist">
+      <button id="tab-login" class="tab is-on" type="button" role="tab" aria-selected="true">Log in</button>
+      <button id="tab-signup" class="tab" type="button" role="tab" aria-selected="false">Create account</button>
+    </div>
+
+    <form id="form-login" class="auth-form" autocomplete="on" novalidate>
+      <label for="login-id">ID</label>
+      <input id="login-id" name="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false">
+      <label for="login-pass">Password</label>
+      <input id="login-pass" name="password" type="password" autocomplete="current-password">
+      <p id="login-error" class="form-error" role="alert"></p>
+      <button id="login-submit" class="btn btn-primary" type="submit">Log in</button>
+    </form>
+
+    <form id="form-signup" class="auth-form" autocomplete="on" novalidate hidden>
+      <label for="signup-id">Choose an ID</label>
+      <input id="signup-id" name="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false">
+      <p class="field-hint">3 to 32 characters: letters, digits, dot, dash or underscore. It must start with a letter.</p>
+      <label for="signup-name">Your name</label>
+      <input id="signup-name" name="name" type="text" autocomplete="name">
+      <label for="signup-pass">Choose a password</label>
+      <input id="signup-pass" name="new-password" type="password" autocomplete="new-password">
+      <p class="field-hint">At least 6 characters. Use a password you do not use anywhere else.</p>
+      <label for="signup-pass2">Repeat the password</label>
+      <input id="signup-pass2" name="new-password-2" type="password" autocomplete="new-password">
+      <div id="signup-check-row" class="signup-check" hidden>
+        <span class="signup-check-q" id="signup-check-q">Are you Prof. Liang?</span>
+        <div class="choice" role="radiogroup" aria-labelledby="signup-check-q">
+          <label><input type="radio" name="signup-check" value="yes"> Yes</label>
+          <label><input type="radio" name="signup-check" value="no"> No</label>
+        </div>
+        <p class="field-hint" id="signup-check-hint"></p>
+      </div>
+      <div id="signup-code-row">
+        <label for="signup-code">Access code</label>
+        <input id="signup-code" name="access-code" type="text" autocomplete="off" autocapitalize="none" spellcheck="false">
+        <p class="field-hint">The code you received from the organiser.</p>
+      </div>
+      <p id="signup-error" class="form-error" role="alert"></p>
+      <button id="signup-submit" class="btn btn-primary" type="submit">Create account</button>
+      <p class="field-hint">Creating an account reserves a set of filings for you. No other evaluator gets the same ones.</p>
+    </form>
+
+    <p id="auth-status" class="auth-status" role="status"></p>
+  </div>
+</div>
+
+<!-- ============================================================ instructions page (before the practice filing) -->
+<div id="screen-intro" class="intro" hidden>
+  <div class="intro-card">
+    <div class="steps" aria-label="Getting started">
+      <span class="step is-on">1. Instructions</span><span class="step">2. Practice filing</span><span class="step">3. Your filings</span>
+    </div>
+    <h1>How to answer</h1>
+    <p class="intro-lead">Please read this once. Next you practise on one filing whose answers are known: you answer each
+      question, press <b>Check answer</b>, and the page tells you whether you are right and where to look. Then your own
+      filings start. You can open these instructions again at any time with the <b>Instructions</b> button.</p>
+    <div id="intro-body" class="instructions"></div>
+    <div class="intro-actions">
+      <button id="intro-next" class="btn btn-primary btn-big" type="button">Next: the practice filing &rarr;</button>
+      <span class="spacer"></span>
+      <button id="intro-logout" class="btn btn-quiet" type="button">Log out</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ work -->
+<div id="screen-app" class="app" hidden>
+  <header class="topbar">
+    <div class="topbar-title" id="app-title">UTP human evaluation</div>
+    <div class="topbar-right">
+      <button id="pending-chip" class="chip chip-warn" type="button" hidden></button>
+      <div class="progress" id="progress" title="">
+        <span id="progress-label">0 / 0 done</span>
+        <span class="progress-track"><i id="progress-fill"></i></span>
+      </div>
+      <button id="btn-instructions" class="btn btn-quiet" type="button">Instructions</button>
+      <button id="btn-example" class="btn btn-quiet" type="button">Practice filing</button>
+      <span class="user-chip" id="user-chip"></span>
+      <button id="btn-logout" class="btn btn-quiet" type="button">Log out</button>
+    </div>
+  </header>
+
+  <div id="banner" class="banner" hidden></div>
+
+  <main class="workspace" id="workspace">
+    <section class="doc-pane" aria-label="Income tax note">
+      <div class="doc-head">
+        <div class="doc-filing">
+          <span id="filing-id" class="filing-id"></span>
+          <strong id="filing-company"></strong>
+          <span id="filing-period" class="filing-period"></span>
+        </div>
+        <a id="pdf-link" href="#" target="_blank" rel="noopener">Open the PDF in a new tab</a>
+      </div>
+      <div class="pdf-bar" id="pdf-bar">
+        <form id="pdf-search" class="pdf-search" role="search" autocomplete="off" novalidate>
+          <label for="pdf-q" class="sr-only">Search the note</label>
+          <input id="pdf-q" type="search" placeholder="Search the note, e.g. unrecognized" spellcheck="false" enterkeyhint="search">
+          <button id="pdf-go" class="btn btn-small btn-search" type="submit">
+            <svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" fill="none" stroke="currentColor" stroke-width="2"/><line x1="12.6" y1="12.6" x2="17.5" y2="17.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+            Search</button>
+          <button id="pdf-prev" class="btn btn-small btn-dark btn-icon" type="button" title="Previous match (Shift+Enter)" aria-label="Previous match">
+            <svg viewBox="0 0 20 20" width="12" height="12" aria-hidden="true"><polyline points="4,13 10,7 16,13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          <button id="pdf-next" class="btn btn-small btn-dark btn-icon" type="button" title="Next match (Enter)" aria-label="Next match">
+            <svg viewBox="0 0 20 20" width="12" height="12" aria-hidden="true"><polyline points="4,7 10,13 16,7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          <span id="pdf-count" class="pdf-count" role="status" aria-live="polite"></span>
+        </form>
+        <div class="pdf-view">
+          <button id="pdf-zoom-out" class="btn btn-small btn-dark btn-icon" type="button" title="Smaller" aria-label="Zoom out">&minus;</button>
+          <span id="pdf-zoom" class="pdf-zoom">100%</span>
+          <button id="pdf-zoom-in" class="btn btn-small btn-dark btn-icon" type="button" title="Larger" aria-label="Zoom in">+</button>
+          <button id="pdf-fit" class="btn btn-small btn-dark" type="button" title="Fit the page to the width of this pane">Fit width</button>
+          <span id="pdf-page" class="pdf-page"></span>
+        </div>
+      </div>
+      <div class="pdf-chips" id="pdf-chips">
+        <span class="pdf-chips-label">Quick search:</span>
+        <button type="button" data-q="unrecognized">unrecognized</button>
+        <button type="button" data-q="uncertain">uncertain</button>
+        <button type="button" data-q="effective tax rate">effective tax rate</button>
+        <button type="button" data-q="interest">interest</button>
+        <button type="button" data-q="penalties">penalties</button>
+        <button type="button" data-q="examination">examination</button>
+        <button type="button" data-q="statute">statute</button>
+      </div>
+      <div class="pdf-wrap" id="pdf-wrap">
+        <div id="pdf-scroll" class="pdf-scroll" tabindex="0" aria-label="The income-tax note"><div id="pdf-pages" class="pdfViewer"></div></div>
+        <div id="pdf-status" class="pdf-status" hidden></div>
+      </div>
+      <div id="no-pdf" class="no-pdf" hidden>
+        <h2>No income-tax note</h2>
+        <p>The financial statements of this filing contain no income-tax note, so there is nothing to read.</p>
+        <p>Answer <strong>No</strong> to question 1 and save.</p>
+      </div>
+    </section>
+
+    <div class="divider" id="divider" role="separator" aria-orientation="vertical" title="Drag to resize"></div>
+
+    <aside class="form-pane" aria-label="Questions">
+      <div class="form-scroll" id="form-scroll">
+        <div class="form-head">
+          <label for="jump">Filing</label>
+          <select id="jump"></select>
+        </div>
+
+        <div id="practice-note" class="practice-note" hidden>
+          <div class="steps steps-small" id="practice-steps"><span class="step is-done">1. Instructions</span><span class="step is-on">2. Practice filing</span><span class="step">3. Your filings</span></div>
+          <p id="practice-lead"></p>
+          <div class="practice-progress">
+            <span id="practice-count"></span>
+            <span class="progress-track"><i id="practice-fill"></i></span>
+          </div>
+        </div>
+
+        <form id="answer-form" novalidate autocomplete="off">
+
+          <section class="q" id="sec-q1">
+            <h2><span class="qn">1</span>Does the note say anything about uncertain tax positions or unrecognized tax benefits?</h2>
+            <p class="hint"><b>Yes</b> if the note has anything related to uncertain tax positions (UTP), also called
+              unrecognized tax benefits: a section, a table, or even one sentence, for example one saying there are none.
+              Older notes may call them tax contingencies or tax reserves. <b>No</b> if the note has nothing related to UTP.</p>
+            <div class="choice" id="q1-choice" role="radiogroup" aria-label="Question 1">
+              <label><input type="radio" name="q1" value="yes" data-path="q1"> Yes</label>
+              <label><input type="radio" name="q1" value="no" data-path="q1"> No</label>
+            </div>
+            <div class="practice-check" data-check="q1" hidden></div>
+          </section>
+
+          <div id="when-yes">
+            <section class="q q-units">
+              <h2><span class="qn qn-plain">$</span>Unit of the amounts in this note</h2>
+              <p class="hint">Look for &ldquo;in thousands&rdquo; or &ldquo;in millions&rdquo; above the tables and choose it
+                here. The unit menu next to each amount then shows this unit. When one amount is in another unit, for example
+                &ldquo;$8.8 billion&rdquo; in a sentence, change the unit next to that amount.</p>
+              <div class="unit-row" id="unit-row">
+                <label for="default-unit">Amounts are in</label>
+                <select id="default-unit" data-path="default_unit">
+                  <option value="">choose&hellip;</option>
+                  <option value="dollars">dollars</option>
+                  <option value="thousands">thousands of dollars</option>
+                  <option value="millions">millions of dollars</option>
+                  <option value="billions">billions of dollars</option>
+                </select>
+              </div>
+            </section>
+
+            <section class="q" id="sec-q2">
+              <h2><span class="qn">2</span>Unrecognized tax benefits at the end of the year</h2>
+              <p class="hint">The total (gross) balance at the end of the fiscal year: the last line of the roll-forward table.
+                When the table and the text differ (the text often rounds), use the table. Without a table, use the balance
+                given in the text. Do not use a balance stated &ldquo;net of&rdquo; something.</p>
+              <div class="amounts" data-amounts="q2"></div>
+              <div class="practice-check" data-check="q2" hidden></div>
+            </section>
+
+            <section class="q" id="sec-q3">
+              <h2><span class="qn">3</span>Part that would affect the effective tax rate</h2>
+              <p class="hint">The part of the balance that, if recognized, would change the effective tax rate. It is usually
+                in the same sentence as the total, and it is never larger than the total. Many companies do not give it.</p>
+              <div class="amounts" data-amounts="q3"></div>
+              <div class="practice-check" data-check="q3" hidden></div>
+            </section>
+
+            <section class="q" id="sec-q4">
+              <h2><span class="qn">4</span>Roll-forward table, current year</h2>
+              <p class="hint">The table that goes from the balance at the beginning of the year to the balance at the end.
+                Read the column of the current fiscal year only and put each line in the row below with the same meaning.
+                The <b>decrease</b> rows already show the parentheses: type only the number, for example <b>791</b> for
+                (791). Tick <b>not given</b> for rows the table does not have.</p>
+              <label class="check" id="q4-notable"><input type="checkbox" data-path="q4.no_table"> The note has no roll-forward table</label>
+              <div class="amounts" data-amounts="q4"></div>
+              <p id="tieout" class="tieout" hidden></p>
+              <div class="practice-check" data-check="q4" hidden></div>
+            </section>
+
+            <section class="q" id="sec-q5">
+              <h2><span class="qn">5</span>Interest and penalties</h2>
+              <p class="hint">Two different numbers, often in neighbouring sentences: the amount accrued at the end of the year
+                (a balance), and the amount recognized as expense during the year.</p>
+              <div class="amounts" data-amounts="q5"></div>
+              <div class="practice-check" data-check="q5" hidden></div>
+            </section>
+
+            <section class="q" id="sec-q6">
+              <h2><span class="qn">6</span>Tax years still open to examination</h2>
+              <p class="hint">Tax authorities can examine (audit) a tax return only for a limited number of years. Years they
+                can still examine are <b>open</b>; earlier years are <b>closed</b>. The note usually says this near the end,
+                close to the unrecognized tax benefits: search for <b>examination</b>, <b>open</b>, <b>closed</b> or
+                <b>IRS</b>. Type years as <b>2018</b>, <b>2016-2020</b> or <b>2014, 2016-2018</b>. Ranges go up to the
+                current fiscal year<span id="q6-fy"></span>.</p>
+              <details class="howto" id="q6-howto">
+                <summary>How to read the usual sentences</summary>
+                <div class="howto-body"></div>
+              </details>
+
+              <div class="sub" id="q6-federal-box">
+                <label for="q6-federal">U.S. federal (the IRS)</label>
+                <div class="yr-row">
+                  <input id="q6-federal" type="text" data-path="q6.federal" placeholder="for example 2016-2020" spellcheck="false">
+                  <label class="ng"><input type="checkbox" data-path="q6.federal_ns"> not stated</label>
+                </div>
+                <p class="hint">&ldquo;All years before 2016 are closed&rdquo; or &ldquo;the IRS has examined our returns through
+                  2015&rdquo; means 2016 up to the current fiscal year.</p>
+                <p class="conv" id="conv-q6-federal"></p>
+              </div>
+
+              <div class="sub" id="q6-state-box">
+                <label for="q6-state">U.S. states</label>
+                <div class="yr-row">
+                  <input id="q6-state" type="text" data-path="q6.state" placeholder="for example 2015-2020" spellcheck="false">
+                  <label class="ng"><input type="checkbox" data-path="q6.state_ns"> not stated</label>
+                </div>
+                <label class="check check-small"><input type="checkbox" data-path="q6.state_various"> Open, but the years are not named
+                  (&ldquo;various state tax years remain open&rdquo;)</label>
+                <p class="hint">A sentence that only says the company files tax returns in many states says nothing about open
+                  years: tick <b>not stated</b>.</p>
+                <p class="conv" id="conv-q6-state"></p>
+              </div>
+
+              <div class="sub" id="q6-foreign-box">
+                <span class="sub-label">Foreign countries</span>
+                <p class="hint">One line per country or group of countries, named as the note names them (for example
+                  <b>United Kingdom</b> or <b>major foreign jurisdictions</b>), with the years as the note gives them:
+                  &ldquo;after 2014&rdquo; is <b>2015+</b>, &ldquo;2012 through 2019&rdquo; is <b>2012-2019</b>.</p>
+                <div id="foreign-rows" class="foreign-rows"></div>
+                <div class="foreign-tools">
+                  <button id="foreign-add" class="btn btn-small" type="button">+ Add a country</button>
+                  <label class="ng"><input type="checkbox" data-path="q6.foreign_ns"> not stated</label>
+                </div>
+              </div>
+              <div class="practice-check" data-check="q6" hidden></div>
+            </section>
+          </div>
+
+          <section class="q q-flag">
+            <label class="check"><input type="checkbox" data-path="flag"> Flag this filing (something is unclear or unusual)</label>
+            <label for="comment" class="sub-label">Comment (optional)</label>
+            <textarea id="comment" data-path="comment" rows="2" maxlength="2000" placeholder="What is unclear, or anything the organiser should know"></textarea>
+          </section>
+        </form>
+      </div>
+
+      <footer class="form-actions">
+        <div id="problems" class="problems" hidden></div>
+        <div class="buttons">
+          <button id="btn-prev" class="btn" type="button">&larr; Previous</button>
+          <button id="btn-skip" class="btn btn-quiet" type="button" title="Go to the next filing without saving this one">Skip for now</button>
+          <button id="btn-back-intro" class="btn" type="button" hidden>&larr; Instructions</button>
+          <span class="spacer"></span>
+          <span id="save-status" class="save-status" role="status"></span>
+          <button id="btn-revert" class="btn btn-quiet btn-small" type="button" title="Go back to the saved answer (or to an empty form)" hidden>Undo my changes</button>
+          <button id="btn-save" class="btn btn-primary" type="button">Save &amp; next &rarr;</button>
+          <button id="btn-start" class="btn btn-primary" type="button" hidden>Start my filings &rarr;</button>
+          <button id="btn-close-example" class="btn btn-primary" type="button" hidden>Back to my filings</button>
+        </div>
+      </footer>
+    </aside>
+  </main>
+</div>
+
+<!-- ============================================================ finished -->
+<div id="screen-done" class="done" hidden>
+  <div class="done-card">
+    <p class="eyebrow">All done</p>
+    <h1>Thank you.</h1>
+    <p id="done-text"></p>
+    <p id="done-pending" class="note note-warn" hidden></p>
+    <div class="buttons">
+      <button id="done-review" class="btn" type="button">Review my answers</button>
+      <button id="done-more" class="btn btn-primary" type="button" hidden></button>
+      <button id="done-logout" class="btn btn-quiet" type="button">Log out</button>
+    </div>
+    <p id="done-error" class="form-error" role="alert"></p>
+  </div>
+</div>
+
+<!-- ============================================================ supervisor -->
+<div id="screen-super" class="super" hidden>
+  <div class="super-head">
+  <header class="topbar">
+    <div class="topbar-title"><span id="super-title">UTP human evaluation</span> <span class="role-chip">Supervisor</span></div>
+    <div class="topbar-right">
+      <span id="super-updated" class="save-status"></span>
+      <button id="super-refresh" class="btn btn-quiet" type="button">Refresh</button>
+      <span class="user-chip" id="super-user"></span>
+      <button id="super-logout" class="btn btn-quiet" type="button">Log out</button>
+    </div>
+  </header>
+  <div class="super-msg-wrap" id="super-msg" hidden><div id="super-error" class="note note-warn" role="status"></div></div>
+  </div>
+  <main class="super-main">
+    <div class="cards" id="super-cards"></div>
+    <div class="super-tools">
+      <h2>Accounts</h2>
+      <span class="spacer"></span>
+      <button id="super-expand" class="btn btn-small" type="button">Show all filing lists</button>
+    </div>
+    <div class="table-wrap">
+      <table class="super-table" id="super-table">
+        <thead>
+          <tr><th>Account</th><th>Kind</th><th>Practice done</th><th class="num">Filings</th><th class="num">Done</th><th>Progress</th>
+            <th class="num">Flagged</th><th>Last saved</th><th class="num">Minutes</th><th></th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p class="super-foot">Every account has its own filings; no two accounts share a filing. Whoever answers Yes to
+      "Are you Prof. Liang?" at sign-up starts with <span id="super-check-n">26</span> filings instead of 100; everything
+      else is the same as for any evaluator. Click an account to see its filings and its password: <b>Show password</b>
+      shows it, <b>Set password</b> gives the account a new one and ends its open logins. <b>Delete
+      account</b> (in the opened account) stops its login; its answers are kept and stay visible here, and its unfinished
+      filings go back to the pool for other evaluators. <b>Number of filings</b> changes how many filings an evaluator
+      has: answered filings never move, a higher number adds free filings, a lower number gives unanswered ones back to the
+      pool (for example to make room for a new evaluator). <b>Restore account</b> brings a deleted account back: it can
+      log in again with its old password and gets back its unfinished filings that are still free, with other free
+      filings in place of any that others took meanwhile.</p>
+  </main>
+</div>
+
+<!-- ============================================================ instructions (shown on the instructions page and in the dialog) -->
+<template id="tpl-instructions">
+  <h3>What you do</h3>
+  <p>For each filing you read the income-tax note of a company's annual report (Form 10-K), shown on the left, and answer
+    six questions about its <em>unrecognized tax benefits</em>: tax benefits the company claimed on its tax returns but is
+    not sure it can keep. Answer only from what the note says.</p>
+
+  <h3>Finding words in the note</h3>
+  <p>Type a word in the search box above the note, for example <b>unrecognized</b>. The note is searched as you type:
+    every match is highlighted and the page jumps to the first one. Press <b>Enter</b> for the next match and
+    <b>Shift+Enter</b> for the previous one. <b>Ctrl+F</b> (<b>Cmd+F</b> on a Mac) takes you to the search box.
+    The buttons under it search for the words that lead to most answers.</p>
+
+  <h3>Rules for every answer</h3>
+  <ol>
+    <li><b>Every box needs an answer.</b> Type the value, or tick <b>not given</b> (<b>not stated</b> in question 6) when the
+      note does not give it. <b>Save &amp; next</b> refuses to save while a box is blank and shows what is missing.</li>
+    <li><b>Current fiscal year.</b> Answer for the most recent year in the note. Its end date is shown above the note.
+      Tables often show two or three years side by side: read only the column of the most recent year.</li>
+    <li><b>Amounts as printed, with their unit.</b> Choose the unit of the note once, under <b>Amounts are in</b> (look for
+      &ldquo;in thousands&rdquo; or &ldquo;in millions&rdquo; above the tables). The unit menu next to each amount then shows
+      that unit. When one amount is in another unit, for example &ldquo;$8.8 billion&rdquo; in a sentence, type 8.8 and
+      choose <b>in billions</b> next to it. Under each box the page shows the amount in millions of dollars, so you can
+      check it.</li>
+    <li><b>Zero is not &ldquo;not given&rdquo;.</b> Type 0 only when the note says zero or none. When a table shows a dash or
+      an empty cell for the current year, tick <b>not given</b>.</li>
+    <li><b>Decreases.</b> In the roll-forward table (question 4) the decrease rows already show the parentheses: type only
+      the number, for example <b>791</b> for (791). Increases are plain numbers, for example 454.</li>
+    <li><b>Several companies in one note.</b> Answer for the company named above the note.</li>
+    <li><b>Not sure?</b> Give your best answer, tick <b>Flag this filing</b> and write a short comment.</li>
+  </ol>
+
+  <h3>The six questions</h3>
+  <dl class="qlist">
+    <dt>1. Does the note say anything about uncertain tax positions or unrecognized tax benefits?</dt>
+    <dd><b>Yes</b> if the note has anything related to uncertain tax positions (UTP), also called unrecognized tax
+      benefits: a section, a table, or even one sentence, for example one saying there are none. Older notes may call them
+      tax contingencies or tax reserves. <b>No</b> if the note has nothing related to UTP; then there is nothing else to
+      answer.</dd>
+    <dt>2. Unrecognized tax benefits at the end of the year</dt>
+    <dd>The total (gross) balance at the end of the fiscal year: the last line of the roll-forward table. When the table and
+      the text differ (the text often rounds), use the table. Without a table, use the balance given in the text. Do not use
+      a balance stated &ldquo;net of&rdquo; something (offsets, loss carryovers, refund claims). Use only a number that the note calls
+      unrecognized tax benefits or uncertain tax positions.</dd>
+    <dt>3. Part that would affect the effective tax rate</dt>
+    <dd>The part of that balance that, if recognized, would change the effective tax rate. It is usually in the same
+      sentence as the total: &ldquo;$16.5 billion, of which $8.8 billion, if recognized, would impact the effective tax
+      rate&rdquo; gives 8.8 billion. It is never larger than question 2. Many companies do not give it: then tick not given.</dd>
+    <dt>4. Roll-forward table</dt>
+    <dd>The table that goes from the balance at the beginning of the year to the balance at the end. Put each line of the
+      current-year column in the row with the same meaning. Lines that fit no row (acquisitions, divestitures,
+      reclassifications, &ldquo;other&rdquo;) go together, added up, in <b>Other lines</b>. Tick not given for rows the table
+      does not have. If the note has no such table, tick <b>The note has no roll-forward table</b>. The page adds the rows up
+      and says whether they reach the ending balance; a small difference from rounding is normal.</dd>
+    <dt>5. Interest and penalties</dt>
+    <dd>Two different numbers: the amount <b>accrued</b> at the end of the year, which is a balance (&ldquo;interest and
+      penalties accrued was $1.4 billion&rdquo;), and the amount <b>recognized as expense</b> during the year (&ldquo;interest
+      and penalty expense of $85 million&rdquo;). If the note gives only one, tick not given for the other.</dd>
+    <dt>6. Tax years still open to examination</dt>
+    <dd>See the next section.</dd>
+  </dl>
+
+  <h3>Question 6 in detail: open tax years</h3>
+  <p>Tax authorities can examine (audit) a company's tax return only for a limited number of years. Years they can still
+    examine are <b>open</b>; earlier years are <b>closed</b>. The note usually says this near the end, close to the
+    unrecognized tax benefits. Search for <b>examination</b>, <b>open</b>, <b>closed</b> or <b>IRS</b>.</p>
+  <p>Answer three parts: <b>U.S. federal</b> (the IRS), <b>U.S. states</b> and <b>foreign countries</b>. For each part type
+    the open years, or tick <b>not stated</b> when the note says nothing about that part.</p>
+  <p>Type years like this: one year <b>2018</b>; a range <b>2016-2020</b>; several <b>2014, 2016-2018</b>. When the note
+    says years are open &ldquo;and later&rdquo;, the range goes up to and includes the current fiscal year: the year of the
+    note's most recent column (Apple's fiscal year that ended in September 2020 is 2020).</p>
+  <div class="q6-table"></div>
+  <p>For foreign countries write one line per country or group of countries, named as the note names them, with the years
+    as the note gives them: &ldquo;after 2014&rdquo; is <b>2015+</b>, &ldquo;2012 through 2019&rdquo; is <b>2012-2019</b>.</p>
+
+  <h3>Saving and coming back</h3>
+  <p><b>Save &amp; next</b> checks that every question is answered, stores your answers and opens the next filing. If
+    something is missing, the page lists it and marks the boxes in red. You can leave at any time and log in again later:
+    you continue where you stopped. <b>Previous</b> and the filing list take you back to change an answer. What you type is
+    also kept in this browser, so an unfinished filing is still there after a reload.</p>
+</template>
+
+<template id="tpl-q6-table">
+  <table class="examples">
+    <thead><tr><th>The note says (current fiscal year 2020)</th><th>You type</th></tr></thead>
+    <tbody>
+      <tr><td>&ldquo;Tax years 2015 through 2018 remain open to examination by the IRS.&rdquo;</td><td>U.S. federal: <b>2015-2018</b></td></tr>
+      <tr><td>&ldquo;All years before 2016 are closed.&rdquo;</td><td>U.S. federal: <b>2016-2020</b></td></tr>
+      <tr><td>&ldquo;The IRS has completed its examination of our returns through 2015.&rdquo;</td><td>U.S. federal: <b>2016-2020</b></td></tr>
+      <tr><td>&ldquo;We are no longer subject to U.S. federal, state or local examinations for years before 2014.&rdquo;</td><td>U.S. federal: <b>2014-2020</b>; U.S. states: <b>2014-2020</b></td></tr>
+      <tr><td>&ldquo;The IRS is examining our 2017 and 2018 returns.&rdquo;</td><td>U.S. federal: <b>2017-2018</b>, plus any other years the note calls open</td></tr>
+      <tr><td>&ldquo;Various state tax years remain open to examination.&rdquo;</td><td>U.S. states: tick <b>Open, but the years are not named</b></td></tr>
+      <tr><td>&ldquo;The Company files income tax returns in the U.S. federal jurisdiction and in many states.&rdquo;</td><td>Nothing about open years: tick <b>not stated</b></td></tr>
+      <tr><td>&ldquo;Tax years after 2014 remain open in certain major foreign jurisdictions.&rdquo;</td><td>Foreign: one line, <b>major foreign jurisdictions</b>, <b>2015+</b></td></tr>
+      <tr><td>&ldquo;Our German returns are open for 2012 through 2019.&rdquo;</td><td>Foreign: one line, <b>Germany</b>, <b>2012-2019</b></td></tr>
+    </tbody>
+  </table>
+</template>
+
+<dialog id="dlg-instructions" class="dialog">
+  <div class="dialog-head">
+    <h2>Instructions</h2>
+    <button class="btn btn-quiet" type="button" data-close>Close</button>
+  </div>
+  <div class="dialog-body instructions" id="dlg-instructions-body"></div>
+</dialog>
+
+<dialog id="dlg-confirm" class="dialog dialog-small">
+  <div class="dialog-body">
+    <p id="confirm-text"></p>
+    <div class="buttons">
+      <span class="spacer"></span>
+      <button id="confirm-no" class="btn" type="button">Cancel</button>
+      <button id="confirm-yes" class="btn btn-primary" type="button">OK</button>
+    </div>
+  </div>
+</dialog>
+
+<script src="config.js?v=1"></script>
+<script src="manifest.js?v=4"></script>
+<script src="logic.js?v=5"></script>
+<script src="pdfjs/pdf.min.js?v=3.11.174"></script>
+<script src="pdfjs/pdf_viewer.js?v=3.11.174"></script>
+<script src="pdfjs/pdf.worker.min.js?v=3.11.174"></script>
+<script src="app.js?v=14"></script>
+</body>
+</html>
