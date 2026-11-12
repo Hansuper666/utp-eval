@@ -4,5 +4,5 @@
  *   apiUrl: "https://script.google.com/macros/s/AKfy...long id.../exec"
  */
 window.UTP_CONFIG = {
-  apiUrl: ""
+  apiUrl: "https://script.google.com/macros/s/AKfycbwtR2Ocq8JrDLBxuueWVQH4PTD_GiQEd5jzPD1oL87W-vqjITMsesrQcdYtNw6l5Zl0/exec"
 };
