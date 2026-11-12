@@ -401,6 +401,7 @@
     leaveWork();
     store.del('session');
     state.token = null;
+    state.superPw = {};
     if (state.user) $('login-id').value = state.user.user_id;
     setAuthTab('login');
     setAuthStatus(message || 'Your login has expired. Please log in again.');
@@ -442,7 +443,7 @@
     store.set('session', {token: state.token, user: state.user});
     setAuthStatus('');
     $('user-chip').textContent = state.user.name || state.user.user_id;
-    if (state.role === 'supervisor') { showSupervisor(); return; }
+    if (state.role === 'supervisor') { state.queue = []; state.assigned = []; state.answers = {}; state.superPw = {}; showSupervisor(); return; }
     applyState(result.state);
     state.queue = store.get(queueKey(), []) || [];
     reconcileQueue();
@@ -879,6 +880,7 @@
     const can = n > 0 && pending === 0 && state.unassignedLeft > 0 && state.role === '';
     more.hidden = !can;
     more.textContent = 'Get ' + Math.min(state.batchSize, state.unassignedLeft) + ' more filings';
+    $('done-check').hidden = can || n === 0 || pending > 0;
     $('done-error').textContent = '';
     show('done');
   }
@@ -979,7 +981,16 @@
       return;
     }
     const next = nextOpenIndex(state.index);
-    if (next < 0) showDone(); else openFiling(next);
+    if (next >= 0) { openFiling(next); return; }
+    await checkForNewFilings();
+  }
+  /* The list may have grown since it was loaded (the organiser can add filings): fetch it, then open the first open
+     filing or show the done page. */
+  async function checkForNewFilings() {
+    const before = state.assigned.length;
+    await reloadAssignments('');
+    if (state.assigned.length > before) showBanner('The organiser added filings to your list.', false);
+    else if (!$('screen-done').hidden) $('done-error').textContent = '';
   }
   /* The organiser changed this evaluator's filings: fetch the list again and continue with the first open filing. */
   async function reloadAssignments(message) {
@@ -1006,8 +1017,10 @@
         if (result.kind === 'rejected') {
           const fid = item.filing_id;
           if (state.answers[fid] && state.answers[fid].pending) delete state.answers[fid];
-          if (state.user) store.set(draftKey(fid), {ts: Date.now(), raw: item.raw});
-          showBanner('The answer for ' + fid + ' could not be saved: ' + result.text + ' What you typed is still in this browser.', true);
+          if (state.user) store.set(draftKey(fid), {ts: Date.now(), base: state.answers[fid] ? state.answers[fid].saved_at || '' : '', raw: item.raw});
+          showBanner(result.code === 'not_assigned'
+            ? fid + ' is no longer on your list (the organiser changed your filings), so your answer to it was not saved. What you typed is kept in this browser.'
+            : 'The answer for ' + fid + ' could not be saved: ' + result.text + ' What you typed is still in this browser.', true);
           if (result.code === 'not_assigned') { await reloadAssignments(''); break; }
         }
       }
@@ -1257,7 +1270,7 @@
     }
     $('super-updated').textContent = 'Saving\u2026';
     try {
-      const r = await api('set_assigned', {token: state.token, user_id: userId, count: want}, 60000);
+      const r = await api('set_assigned', {token: state.token, user_id: userId, count: want, expect: u.assigned}, 60000);
       if (!r.ok) {
         if (r.code === 'auth') { requireLogin(); return; }
         superMessage(r.error || 'The number could not be changed.', true);
@@ -1297,7 +1310,7 @@
     const u = ((d && d.users) || []).find((x) => x.user_id === userId);
     if (!u || !u.deleted_at) return;
     const parts = ['Restore the account "' + u.user_id + '"' + (u.name && u.name !== u.user_id ? ' (' + u.name + ')' : '') + '?',
-      'It can log in again with its old password, and all its answers are still there.'];
+      'It can log in again with its password, and all its answers are still there.'];
     if (!u.freed) {
       parts.push('It keeps its ' + filingsText(u.assigned) + '.');
     } else {
@@ -1307,9 +1320,9 @@
       if (!gone) {
         parts.push('It gets back the ' + filingsText(u.freed, 'unfinished') + ' that went back to the pool when it was deleted.');
       } else {
-        parts.push('When it was deleted, ' + filingsText(u.freed, 'unfinished') + ' went back to the pool. ' +
-          (back ? back + (back === 1 ? ' is' : ' are') + ' still free and ' + (back === 1 ? 'comes' : 'come') + ' back; ' : '') +
-          'other evaluators took ' + gone + '.');
+        parts.push('When it was deleted, ' + filingsText(u.freed, 'unfinished') + ' went back to the pool.');
+        parts.push(back ? back + (back === 1 ? ' is' : ' are') + ' still free and ' + (back === 1 ? 'comes' : 'come') + ' back; other evaluators took ' + gone + '.'
+                        : 'Other evaluators took all of them.');
         parts.push(others === gone ? 'In their place it gets ' + filingsText(others, 'other free') + '.' :
           (others ? 'In their place it gets ' + filingsText(others, 'other free') + ', all that are free.' : 'No other filings are free to put in their place.'));
       }
@@ -1322,7 +1335,7 @@
         if (r.code === 'auth') { requireLogin(); return; }
         superMessage(r.error || 'The account could not be restored.', true);
       } else {
-        let text = '"' + r.user_id + '" is restored and can log in again with its old password.';
+        let text = '"' + r.user_id + '" is restored and can log in again with its password.';
         text += ' It has ' + filingsText(r.assigned) + ', ' + r.answered + ' of them answered.';
         const got = [];
         if (r.back) got.push(r.back + ' of its unfinished filings came back');
@@ -1600,6 +1613,11 @@
       else $('save-status').textContent = 'This is the only filing left without an answer.';
     });
     $('btn-save').addEventListener('click', saveAndNext);
+    $('done-check').addEventListener('click', async () => {
+      $('done-check').disabled = true;
+      try { await checkForNewFilings(); } finally { $('done-check').disabled = false; }
+      if (!$('screen-done').hidden) $('done-error').textContent = 'No new filings yet. The organiser can give you more.';
+    });
     $('btn-revert').addEventListener('click', () => {
       if (!state.formFid) return;
       store.del(draftKey(state.formFid));

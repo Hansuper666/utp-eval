@@ -338,13 +338,21 @@ details.howto .howto-body { margin-top: 8px; }
 .st-flag { color: var(--warn); font-weight: 650; }
 .super-foot { margin-top: 12px; color: var(--muted); font-size: 13px; max-width: 900px; }
 .kind { font-size: 12px; padding: 1px 8px; border-radius: 999px; background: #eef1f6; }
-.kind-checker { background: #fff1d6; color: #7a4a00; }
 .kind-supervisor { background: #e9e5ff; color: #3b2a8a; }
 .kind-deleted { background: var(--err-soft); color: var(--err); font-weight: 600; }
 .super-table tr.is-deleted td { color: var(--muted); }
 .super-table tr.is-deleted .bar i { background: #9aa3b2; }
 .filings-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .filings-head > span:first-child { flex: 1 1 auto; }
+/* C5: at narrower widths drop the least needed columns, so an opened account's buttons stay inside the window */
+@media (max-width: 1150px) {
+  .super-table th:nth-child(3), .super-table tr.user-row td:nth-child(3),
+  .super-table th:nth-child(9), .super-table tr.user-row td:nth-child(9) { display: none; }
+}
+@media (max-width: 950px) {
+  .super-table th:nth-child(7), .super-table tr.user-row td:nth-child(7),
+  .super-table th:nth-child(8), .super-table tr.user-row td:nth-child(8) { display: none; }
+}
 .deleted-note { color: var(--err); font-weight: 600; }
 .assign-ctl { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 13px; color: var(--ink); }
 .assign-ctl label { font-weight: 600; }
