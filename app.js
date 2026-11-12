@@ -53,7 +53,16 @@
 
   /* ---------------------------------------------------------------- server */
   class ServerDown extends Error {}
+  /* One request to the backend. A "busy" answer means the server refused before doing anything (it could not get its
+     lock within 25 s, for example when many people sign up at once), so asking again is safe: up to 2 more times. */
   async function api(action, payload, timeoutMs) {
+    for (let attempt = 0; ; attempt++) {
+      const data = await apiOnce(action, payload, timeoutMs);
+      if (data.ok || data.code !== 'busy' || attempt >= 2) return data;
+      await new Promise((resolve) => setTimeout(resolve, 2000 + Math.random() * 3000));
+    }
+  }
+  async function apiOnce(action, payload, timeoutMs) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs || 30000);
     let body;
