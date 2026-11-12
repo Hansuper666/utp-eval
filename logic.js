@@ -581,12 +581,52 @@
     return res;
   }
 
+  /* ---- the texts of the supervisor's Restore account: pure functions, so that every case can be tested ---- */
+  function nFilings(n, what) { return n + ' ' + (what ? what + ' ' : '') + 'filing' + (n === 1 ? '' : 's'); }
+
+  /* What restoring will do, as the confirmation says it. u = the account in the overview (assigned, freed = unfinished
+     filings freed when it was deleted, freed_free = how many of those nobody took); free = filings free now.
+     The numbers follow restoreAccount_ in the backend: the still-free ones come back, each taken one is replaced by
+     another free filing as long as any are free. */
+  function restorePlan(u, free) {
+    var freed = Math.max(0, Number(u && u.freed) || 0);
+    var back = Math.min(Math.max(0, Number(u && u.freed_free) || 0), freed);
+    var gone = freed - back;
+    var others = Math.min(gone, Math.max(0, (Number(free) || 0) - back));
+    var parts = [];
+    if (!freed) {
+      parts.push('It keeps its ' + nFilings(Number(u && u.assigned) || 0) + '.');
+    } else if (!gone) {
+      parts.push('It gets back the ' + nFilings(freed, 'unfinished') + ' that went back to the pool when it was deleted.');
+    } else {
+      parts.push('When it was deleted, ' + nFilings(freed, 'unfinished') + ' went back to the pool.');
+      parts.push(back ? back + (back === 1 ? ' is' : ' are') + ' still free and ' + (back === 1 ? 'comes' : 'come') + ' back; other evaluators took ' + gone + '.'
+                      : 'Other evaluators took all of them.');
+      parts.push(others === gone ? 'In their place it gets ' + nFilings(others, 'other free') + '.'
+        : (others ? 'In their place it gets ' + nFilings(others, 'other free') + ', all that are free.' : 'No other filings are free to put in their place.'));
+    }
+    return {back: back, gone: gone, others: others, short: gone - others, text: parts.join(' ')};
+  }
+
+  /* What the page says after a restore. r = the reply of restore_account. */
+  function restoredText(r) {
+    var text = '"' + r.user_id + '" is restored and can log in again with its password. It has ' + nFilings(r.assigned) + ', ' +
+      r.answered + ' of them answered.';
+    var got = [];
+    if (r.back) got.push(r.back + ' of its unfinished filings came back');
+    if (r.added) got.push(nFilings(r.added, 'other free') + (r.added === 1 ? ' replaces' : ' replace') + ' ones others took');
+    if (got.length) text += ' ' + got.join(' and ') + '.';
+    if (r.short) text += ' ' + r.short + (r.short === 1 ? ' was' : ' were') + ' not replaced because no filings are free; use Number of filings when some are free.';
+    return text;
+  }
+
   var api = {
     UNITS: UNITS, UNIT_NAMES: UNIT_NAMES, UNIT_LONG: UNIT_LONG, AMOUNT_GROUPS: AMOUNT_GROUPS, ALL_AMOUNTS: ALL_AMOUNTS,
     blankRaw: blankRaw, mergeRaw: mergeRaw, getPath: getPath, setPath: setPath, parseAmount: parseAmount,
     isParenthesized: isParenthesized, signed: signed, parseYears: parseYears, yearSpec: yearSpec, toMillions: toMillions,
     computeAnswer: computeAnswer, tieOut: tieOut, problemLines: problemLines, rawFromAnswer: rawFromAnswer,
-    practiceSlice: practiceSlice, checkPractice: checkPractice, fmt: fmt, labelOf: labelOf
+    practiceSlice: practiceSlice, checkPractice: checkPractice, fmt: fmt, labelOf: labelOf,
+    restorePlan: restorePlan, restoredText: restoredText
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.UTPLogic = api;

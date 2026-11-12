@@ -982,7 +982,9 @@
     }
     const next = nextOpenIndex(state.index);
     if (next >= 0) { openFiling(next); return; }
-    await checkForNewFilings();
+    if (result.kind !== 'ok') { showDone(); return; }      // not reachable now: the check runs when the answer is uploaded
+    setBusy(true);
+    try { await checkForNewFilings(); } finally { setBusy(false); }
   }
   /* The list may have grown since it was loaded (the organiser can add filings): fetch it, then open the first open
      filing or show the done page. */
@@ -1008,27 +1010,33 @@
   async function flushQueue() {
     if (state.flushing || state.busy || !state.token || !state.queue.length) return;
     state.flushing = true;
+    let uploaded = 0;
+    let moved = null;         // set when a waiting answer was for a filing that is no longer on the list
     try {
       for (const item of state.queue.slice()) {
         if (!state.token) break;
         const result = await upload(item);
         if (result.kind === 'offline') break;
         if (result.kind === 'auth') { requireLogin('Your login has expired. Log in again: your answers are kept in this browser and will be saved.'); break; }
-        if (result.kind === 'rejected') {
-          const fid = item.filing_id;
-          if (state.answers[fid] && state.answers[fid].pending) delete state.answers[fid];
-          if (state.user) store.set(draftKey(fid), {ts: Date.now(), base: state.answers[fid] ? state.answers[fid].saved_at || '' : '', raw: item.raw});
-          showBanner(result.code === 'not_assigned'
-            ? fid + ' is no longer on your list (the organiser changed your filings), so your answer to it was not saved. What you typed is kept in this browser.'
-            : 'The answer for ' + fid + ' could not be saved: ' + result.text + ' What you typed is still in this browser.', true);
-          if (result.code === 'not_assigned') { await reloadAssignments(''); break; }
+        if (result.kind === 'ok') { uploaded++; continue; }
+        const fid = item.filing_id;
+        if (state.answers[fid] && state.answers[fid].pending) delete state.answers[fid];
+        if (state.user) store.set(draftKey(fid), {ts: Date.now(), base: state.answers[fid] ? state.answers[fid].saved_at || '' : '', raw: item.raw});
+        if (result.code === 'not_assigned') {
+          moved = fid + ' is no longer on your list (the organiser changed your filings), so your answer to it was not saved. What you typed is kept in this browser.';
+          break;
         }
+        showBanner('The answer for ' + fid + ' could not be saved: ' + result.text + ' What you typed is still in this browser.', true);
       }
     } finally {
       state.flushing = false;
       updateChrome();
-      if (!$('screen-done').hidden) showDone();
     }
+    if (!state.token) return;
+    if (moved) { await reloadAssignments(moved); return; }
+    if ($('screen-done').hidden) return;
+    if (uploaded && !state.queue.length) await checkForNewFilings();      // the organiser may have added filings meanwhile
+    else showDone();
   }
   function showBanner(text, isError) {
     const b = $('banner');
@@ -1304,29 +1312,13 @@
     }
     loadOverview(true);
   }
-  function filingsText(n, what) { return n + ' ' + (what ? what + ' ' : '') + 'filing' + (n === 1 ? '' : 's'); }
   async function restoreAccount(userId) {
     const d = state.superData;
     const u = ((d && d.users) || []).find((x) => x.user_id === userId);
     if (!u || !u.deleted_at) return;
     const parts = ['Restore the account "' + u.user_id + '"' + (u.name && u.name !== u.user_id ? ' (' + u.name + ')' : '') + '?',
-      'It can log in again with its password, and all its answers are still there.'];
-    if (!u.freed) {
-      parts.push('It keeps its ' + filingsText(u.assigned) + '.');
-    } else {
-      const back = u.freed_free || 0;
-      const gone = u.freed - back;
-      const others = Math.min(gone, Math.max(0, ((d.totals && d.totals.free) || 0) - back));
-      if (!gone) {
-        parts.push('It gets back the ' + filingsText(u.freed, 'unfinished') + ' that went back to the pool when it was deleted.');
-      } else {
-        parts.push('When it was deleted, ' + filingsText(u.freed, 'unfinished') + ' went back to the pool.');
-        parts.push(back ? back + (back === 1 ? ' is' : ' are') + ' still free and ' + (back === 1 ? 'comes' : 'come') + ' back; other evaluators took ' + gone + '.'
-                        : 'Other evaluators took all of them.');
-        parts.push(others === gone ? 'In their place it gets ' + filingsText(others, 'other free') + '.' :
-          (others ? 'In their place it gets ' + filingsText(others, 'other free') + ', all that are free.' : 'No other filings are free to put in their place.'));
-      }
-    }
+      'It can log in again with its password, and all its answers are still there.',
+      L.restorePlan(u, (d.totals && d.totals.free) || 0).text];
     if (!(await confirmBox(parts.join(' '), 'Restore account'))) return;
     $('super-updated').textContent = 'Restoring\u2026';
     try {
@@ -1335,14 +1327,7 @@
         if (r.code === 'auth') { requireLogin(); return; }
         superMessage(r.error || 'The account could not be restored.', true);
       } else {
-        let text = '"' + r.user_id + '" is restored and can log in again with its password.';
-        text += ' It has ' + filingsText(r.assigned) + ', ' + r.answered + ' of them answered.';
-        const got = [];
-        if (r.back) got.push(r.back + ' of its unfinished filings came back');
-        if (r.added) got.push(filingsText(r.added, 'other free') + ' replace ones others took');
-        if (got.length) text += ' ' + got.join(' and ') + '.';
-        if (r.short) text += ' ' + r.short + (r.short === 1 ? ' was' : ' were') + ' not replaced because no filings are free; use Number of filings when some are free.';
-        superMessage(text, false);
+        superMessage(L.restoredText(r), false);
       }
     } catch (e) {
       superMessage(DOWN_TEXT, true);
